@@ -3,15 +3,15 @@ package com.example.miniauth.service;
 import com.example.miniauth.domain.Role;
 import com.example.miniauth.domain.User;
 import com.example.miniauth.dto.auth.LoginRequest;
+import com.example.miniauth.dto.auth.LoginResponse;
 import com.example.miniauth.dto.auth.MeResponse;
 import com.example.miniauth.dto.auth.SignupRequest;
 import com.example.miniauth.dto.auth.SignupResponse;
 import com.example.miniauth.repository.RoleRepository;
 import com.example.miniauth.repository.UserRepository;
 import com.example.miniauth.security.CustomUserDetails;
+import com.example.miniauth.security.jwt.JwtTokenProvider;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.DisabledException;
@@ -19,12 +19,10 @@ import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.util.Locale;
 
 import static org.springframework.util.StringUtils.truncate;
@@ -37,8 +35,8 @@ public class AuthService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
-    private final SecurityContextRepository securityContextRepository;
     private final LoginAttemptService loginAttemptService;
+    private final JwtTokenProvider jwtTokenProvider;
 
     @Transactional
     public SignupResponse signup(SignupRequest request) {
@@ -61,10 +59,9 @@ public class AuthService {
         return SignupResponse.from(userRepository.save(user));
     }
 
-    public MeResponse login(
+    public LoginResponse login(
             LoginRequest request,
-            HttpServletRequest httpRequest,
-            HttpServletResponse httpResponse
+            HttpServletRequest httpRequest
     ) {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         String ip = extractClientIp(httpRequest);
@@ -83,10 +80,17 @@ public class AuthService {
             );
             throw e;
         }
-        // 기존 세션 교체 및 SecurityContext 저장 로직
         loginAttemptService.recordSuccess(email, ip, userAgent);
-        return MeResponse.from((CustomUserDetails) authentication.getPrincipal());
+
+        CustomUserDetails principal =
+                (CustomUserDetails) authentication.getPrincipal();
+        String accessToken = jwtTokenProvider.createToken(principal);
+        return LoginResponse.bearer(
+                accessToken,
+                MeResponse.from(principal)
+        );
     }
+
     private String resolveFailureReason(AuthenticationException e) {
         if (e instanceof LockedException) {
             return "LOCKED";
@@ -96,6 +100,7 @@ public class AuthService {
         }
         return "BAD_CREDENTIALS";
     }
+
     private String extractClientIp(HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {

@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>miniauth test client</title>
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --panel: #fff;
+      --line: #d8dde6;
+      --text: #1b2430;
+      --muted: #5b6777;
+      --accent: #1f6feb;
+      --danger: #c62828;
+      --ok: #1b7f4a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    main {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 24px 16px 48px;
+      display: grid;
+      gap: 16px;
+    }
+    h1 { margin: 0 0 4px; font-size: 1.4rem; }
+    .hint { color: var(--muted); font-size: 0.9rem; margin: 0; }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    h2 { margin: 0 0 12px; font-size: 1.05rem; }
+    .row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    label {
+      display: grid;
+      gap: 4px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font: inherit;
+      color: var(--text);
+      background: #fff;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    button {
+      border: 0;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font: inherit;
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+    }
+    button.secondary { background: #445064; }
+    button.danger { background: var(--danger); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    #status {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    #status.ok { color: var(--ok); }
+    #status.err { color: var(--danger); }
+    #tokenHint {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin: 0 0 8px;
+      word-break: break-all;
+    }
+    pre {
+      margin: 0;
+      padding: 12px;
+      background: #111827;
+      color: #e5e7eb;
+      border-radius: 8px;
+      overflow: auto;
+      min-height: 180px;
+      font-size: 0.82rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      padding: 8px 6px;
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 600; }
+    .admin-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+    .admin-actions button { padding: 4px 8px; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>miniauth test client</h1>
+      <p class="hint">서버 기동 후 <code>/test-client.html</code> 로 접속하세요. JWT Bearer 토큰으로 인증합니다.</p>
+    </header>
+
+    <section>
+      <h2>회원가입</h2>
+      <div class="row">
+        <label>email <input id="signupEmail" type="email" value="user@example.com" /></label>
+        <label>password <input id="signupPassword" type="password" value="password123" /></label>
+        <label>displayName <input id="signupName" type="text" value="테스터" /></label>
+      </div>
+      <div class="actions">
+        <button type="button" id="btnSignup">가입</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>로그인 / JWT</h2>
+      <div class="row">
+        <label>email <input id="loginEmail" type="email" value="user@example.com" /></label>
+        <label>password <input id="loginPassword" type="password" value="password123" /></label>
+      </div>
+      <p id="tokenHint">저장된 토큰 없음</p>
+      <div class="actions">
+        <button type="button" id="btnLogin">로그인</button>
+        <button type="button" class="secondary" id="btnMe">/me</button>
+        <button type="button" class="danger" id="btnLogout">로그아웃</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>관리자</h2>
+      <p class="hint">ROLE_ADMIN 계정으로 로그인한 뒤 사용하세요.</p>
+      <div class="actions" style="margin-bottom: 12px;">
+        <button type="button" class="secondary" id="btnAdminList">사용자 목록</button>
+      </div>
+      <div id="adminTable"></div>
+    </section>
+
+    <section>
+      <h2>응답</h2>
+      <div id="status">대기 중</div>
+      <pre id="output">{}</pre>
+    </section>
+  </main>
+
+  <script>
+    const TOKEN_KEY = "miniauth.accessToken";
+    const statusEl = document.getElementById("status");
+    const outputEl = document.getElementById("output");
+    const adminTable = document.getElementById("adminTable");
+    const tokenHint = document.getElementById("tokenHint");
+
+    function getToken() {
+      return localStorage.getItem(TOKEN_KEY);
+    }
+
+    function setToken(token) {
+      if (token) {
+        localStorage.setItem(TOKEN_KEY, token);
+      } else {
+        localStorage.removeItem(TOKEN_KEY);
+      }
+      refreshTokenHint();
+    }
+
+    function refreshTokenHint() {
+      const token = getToken();
+      if (!token) {
+        tokenHint.textContent = "저장된 토큰 없음";
+        return;
+      }
+      const preview = token.length > 40
+        ? `${token.slice(0, 20)}…${token.slice(-12)}`
+        : token;
+      tokenHint.textContent = `Bearer ${preview}`;
+    }
+
+    function setStatus(ok, message) {
+      statusEl.className = ok ? "ok" : "err";
+      statusEl.textContent = message;
+    }
+
+    function show(data) {
+      outputEl.textContent = typeof data === "string"
+        ? data
+        : JSON.stringify(data, null, 2);
+    }
+
+    async function api(method, path, body) {
+      const options = {
+        method,
+        headers: {}
+      };
+      const token = getToken();
+      if (token) {
+        options.headers["Authorization"] = `Bearer ${token}`;
+      }
+      if (body !== undefined) {
+        options.headers["Content-Type"] = "application/json";
+        options.body = JSON.stringify(body);
+      }
+      const res = await fetch(path, options);
+      const text = await res.text();
+      let data = text;
+      if (text) {
+        try { data = JSON.parse(text); } catch (_) { /* keep text */ }
+      } else {
+        data = { status: res.status, empty: true };
+      }
+      if (!res.ok) {
+        const detail = data?.detail || data?.message || res.statusText;
+        setStatus(false, `${res.status} ${detail}`);
+        show(data);
+        throw new Error(detail || String(res.status));
+      }
+      setStatus(true, `${res.status} OK`);
+      show(data);
+      return data;
+    }
+
+    function renderUsers(page) {
+      const users = page?.content || [];
+      if (!users.length) {
+        adminTable.innerHTML = "<p class='hint'>사용자 없음</p>";
+        return;
+      }
+      const rows = users.map((u) => `
+        <tr>
+          <td>
+            <div>${escapeHtml(u.displayName)}</div>
+            <div class="hint">${escapeHtml(u.email)}</div>
+            <div class="hint">${escapeHtml(u.publicId)}</div>
+          </td>
+          <td>${escapeHtml(u.status)}</td>
+          <td>${escapeHtml((u.roles || []).join(", "))}</td>
+          <td>
+            <div class="admin-actions">
+              <button type="button" data-act="unlock" data-id="${escapeAttr(u.publicId)}">unlock</button>
+              <button type="button" data-act="enable" data-id="${escapeAttr(u.publicId)}">enable</button>
+              <button type="button" class="danger" data-act="disable" data-id="${escapeAttr(u.publicId)}">disable</button>
+              <button type="button" class="secondary" data-act="add-admin" data-id="${escapeAttr(u.publicId)}">+ADMIN</button>
+            </div>
+          </td>
+        </tr>
+      `).join("");
+      adminTable.innerHTML = `
+        <table>
+          <thead>
+            <tr><th>사용자</th><th>상태</th><th>역할</th><th>액션</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+    function escapeAttr(value) {
+      return escapeHtml(value).replaceAll("'", "&#39;");
+    }
+
+    document.getElementById("btnSignup").onclick = async () => {
+      await api("POST", "/api/auth/signup", {
+        email: document.getElementById("signupEmail").value,
+        password: document.getElementById("signupPassword").value,
+        displayName: document.getElementById("signupName").value
+      });
+    };
+
+    document.getElementById("btnLogin").onclick = async () => {
+      const data = await api("POST", "/api/auth/login", {
+        email: document.getElementById("loginEmail").value,
+        password: document.getElementById("loginPassword").value
+      });
+      if (data?.accessToken) {
+        setToken(data.accessToken);
+      }
+    };
+
+    document.getElementById("btnMe").onclick = async () => {
+      await api("GET", "/api/auth/me");
+    };
+
+    document.getElementById("btnLogout").onclick = async () => {
+      setToken(null);
+      try {
+        await api("POST", "/api/auth/logout");
+      } catch (_) {
+        setStatus(true, "토큰 삭제됨");
+        show({ loggedOut: true });
+      }
+    };
+
+    document.getElementById("btnAdminList").onclick = async () => {
+      const page = await api("GET", "/api/admin/users?size=50");
+      renderUsers(page);
+    };
+
+    adminTable.addEventListener("click", async (event) => {
+      const btn = event.target.closest("button[data-act]");
+      if (!btn) return;
+      const id = btn.dataset.id;
+      const act = btn.dataset.act;
+      let path;
+      let method = "POST";
+      let body;
+      if (act === "unlock") path = `/api/admin/users/${id}/unlock`;
+      else if (act === "enable") path = `/api/admin/users/${id}/enable`;
+      else if (act === "disable") path = `/api/admin/users/${id}/disable`;
+      else if (act === "add-admin") {
+        path = `/api/admin/users/${id}/roles`;
+        body = { roleCode: "ROLE_ADMIN" };
+      } else return;
+      await api(method, path, body);
+      const page = await api("GET", "/api/admin/users?size=50");
+      renderUsers(page);
+    });
+
+    refreshTokenHint();
+  </script>
+</body>
+</html>

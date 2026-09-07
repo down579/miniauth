@@ -12,10 +12,7 @@ spring:
         jdbc:
           time_zone: UTC
 
-server:
-  servlet:
-    session:
-      timeout: 30m
-      cookie:
-        http-only: true
-        same-site: lax
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-me-to-a-long-random-secret-key-32bytes}
+    expiration-ms: 900000

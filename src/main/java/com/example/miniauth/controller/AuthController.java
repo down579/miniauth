@@ -1,13 +1,13 @@
 package com.example.miniauth.controller;
 
 import com.example.miniauth.dto.auth.LoginRequest;
+import com.example.miniauth.dto.auth.LoginResponse;
 import com.example.miniauth.dto.auth.MeResponse;
 import com.example.miniauth.dto.auth.SignupRequest;
 import com.example.miniauth.dto.auth.SignupResponse;
 import com.example.miniauth.security.CustomUserDetails;
 import com.example.miniauth.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -27,19 +27,17 @@ public class AuthController {
             @Valid @RequestBody SignupRequest request
     ) {
         SignupResponse response = authService.signup(request);
-
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(response);
     }
 
     @PostMapping("/login")
-    public MeResponse login(
+    public LoginResponse login(
             @Valid @RequestBody LoginRequest request,
-            HttpServletRequest httpRequest,
-            HttpServletResponse httpResponse
+            HttpServletRequest httpRequest
     ) {
-        return authService.login(request, httpRequest, httpResponse);
+        return authService.login(request, httpRequest);
     }
 
     @GetMapping("/me")
